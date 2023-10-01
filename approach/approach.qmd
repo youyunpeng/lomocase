@@ -11,7 +11,7 @@ editor: visual
 ## Installing packages
 
 ```{r}
-pacman::p_load(sf, tmap, tidyverse, sfdep, DT, gridExtra)
+pacman::p_load(sf, tmap, tidyverse, sfdep, DT, patchwork, ggplot2)
 ```
 
 ## Data Wrangling
@@ -112,3 +112,243 @@ We can include the location dimension by conducting a join with "consumer_orders
 product_order_reviews_location<-product_order_reviews |> 
   left_join(consumer_orders_location, by="order_id")
 ```
+## Exploratory Data analysis
+
+### Aggregate
+
+Lets create 3 chloropleth maps corresponding to the different
+
+```{r}
+count_location_state_geometry<-count_location_state |> 
+  inner_join(TH_ADM1, by="ADM1_EN") |> 
+  st_as_sf()
+
+tmap_mode("plot")
+plot_total_payment<-tm_shape(count_location_state_geometry |> 
+           select(ADM1_EN, total_payment, geometry))+
+  tm_fill("total_payment",
+          n=6,
+          style="equal",
+          palette="Blues")+
+  tm_borders(alpha = 0.5) +
+  tm_layout(main.title=paste("Distribution of total payment"), 
+            main.title.position="center",
+            main.title.size = 0.8,
+            frame=TRUE)+
+  tm_scale_bar()+
+  tm_grid(alpha=0.2)
+
+plot_ave_payment<-tm_shape(count_location_state_geometry |> 
+           select(ADM1_EN, ave_payment, geometry))+
+  tm_fill("ave_payment",
+          n=6,
+          style="equal",
+          palette="Blues")+
+  tm_borders(alpha = 0.5) +
+  tm_layout(main.title=paste("Distribution of ave payment"), 
+            main.title.position="center",
+            main.title.size = 0.8,
+            frame=TRUE)+
+  tm_scale_bar()+
+  tm_grid(alpha=0.2)
+
+plot_no_orders<-tm_shape(count_location_state_geometry |> 
+           select(ADM1_EN, no_orders, geometry))+
+  tm_fill("no_orders",
+          n=6,
+          style="equal",
+          palette="Blues")+
+  tm_borders(alpha = 0.5) +
+  tm_layout(main.title=paste("Distribution of no payment"), 
+            main.title.position="center",
+            main.title.size = 0.8,
+            frame=TRUE)+
+  tm_scale_bar()+
+  tm_grid(alpha=0.2)
+
+plot_ave_payment
+plot_total_payment
+plot_no_orders
+```
+
+Given that the aggregated data would have more data points, we can conduct some statistical analysis on the possibility of clustering of these results.
+
+### Products
+
+With the dataset in place, we can now create a shiny app to loop through the different products and indicators that the user wants to focus on. We first try to create a prototype with the inputs "cool_stuff" as the product category and "no_orders" as the indicator
+
+```{r}
+product_order_reviews_location<-product_order_reviews |> 
+  left_join(consumer_orders_location, by="order_id") |>
+  group_by(product_category_name_english, customer_state) |> 
+  summarise(no_orders=n(), total_price=sum(price), ave_price=mean(price)) |> 
+  rename(ADM1_EN=customer_state) |> 
+  right_join(TH_ADM1, by="ADM1_EN") |> 
+  st_as_sf()
+
+i="cool_stuff"
+j="no_orders"
+
+# create tmap plot
+tmap_mode("plot")
+tm_shape(product_order_reviews_location |> 
+           filter(product_category_name_english==i) |> 
+           select(ADM1_EN, j, geometry))+
+  tm_fill(j,
+          n=6,
+          style="equal",
+          palette="Blues")+
+  tm_borders(alpha = 0.5) +
+  tm_layout(main.title=paste(j, "for", i), 
+            main.title.position="center",
+            main.title.size=1.2,
+            legend.height=0.45,
+            legend.width = 0.35,
+            frame=TRUE)+
+  tm_scale_bar()+
+  tm_grid(alpha=0.2)
+```
+
+A simple Shiny App can be created:
+
+```{r eval=FALSE}
+library(shiny)
+product_list<-unique(product_order_reviews_location$product_category_name_english)
+
+# Define the UI
+ui <- fluidPage(
+  selectInput(
+    "indicator",
+    label="pick an indicator",
+    choices=c("no_orders", "ave_price","total_price"),
+    selected="no_orders",
+    multiple=FALSE
+  ),
+  selectInput(
+    "product",
+    label="pick a product category",
+    choices=product_list,
+    selected="cool_stuff",
+    multiple=FALSE
+  ),
+  # Create a tmap output element
+  tmapOutput("my_map"),
+  DT::dataTableOutput(outputId = "my_table")
+)
+
+# Define the server
+server <- function(input, output) {
+  dataset<-reactive({
+    product_order_reviews_location |>
+      filter(product_category_name_english==input$product) |> 
+      select(ADM1_EN, input$indicator, geometry)
+  })
+  # Render the tmap in the output element
+  output$my_map <- renderTmap({
+    # Create the tmap
+    tm_shape(shp=dataset())+
+      tm_fill(input$indicator,
+          style="quantile",
+          palette="Blues")
+  })
+  
+  output$my_table<-DT::renderDataTable({
+    DT::datatable(data=dataset())
+  })
+}
+
+# Run the app
+shinyApp(ui, server)
+```
+
+## A more generic analysis of products
+Time analysis:
+```{r}
+i="health_beauty"
+j="no_order"
+
+specific_product_time<-product_order_reviews |> 
+  mutate(shipping_limit_date=as.Date(shipping_limit_date, format = "%d/%m/%Y")) |> 
+  mutate(shipping_month=as.Date(format(shipping_limit_date, "%Y-%m-01"))) |> 
+  filter(product_category_name_english==i, 
+         shipping_month!="2018-09-01") |> #remove due to incomplete dataset to represent sales of the month
+  select(price, product_category_name_english, shipping_month) |> 
+  group_by(shipping_month) |> 
+  summarise(no_order=n(), total_price=sum(price))
+
+#fitting linear model and extracting slope of line
+coef(lm(no_order~shipping_month, data=specific_product_time))["shipping_month"] |> 
+  as.numeric()
+
+ggplot(specific_product_time,aes(x=shipping_month, y=no_order))+
+  geom_point()+
+  geom_smooth(method = "lm", se = FALSE)
+
+ggplot(specific_product_time,aes(x=shipping_month, y=total_price))+
+  geom_point()+
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+We can create 2 functions to obtain the slopes for no_order and total price below:
+```{r} 
+determine_slope_no_order <- function(product) {
+  
+  specific_product_time<-product_order_reviews |> 
+  mutate(shipping_limit_date=as.Date(shipping_limit_date, format = "%d/%m/%Y")) |> 
+  mutate(shipping_month=as.Date(format(shipping_limit_date, "%Y-%m-01"))) |> 
+  filter(product_category_name_english==product, 
+         shipping_month!="2018-09-01") |> #remove due to incomplete dataset to represent sales of the month
+  select(price, product_category_name_english, shipping_month) |> 
+  group_by(shipping_month) |> 
+  summarise(no_order=n(), total_price=sum(price))
+  
+  slope<-coef(lm(no_order~shipping_month, data=specific_product_time))["shipping_month"] |> 
+  as.numeric()
+  
+  result <- ifelse(is.na(slope), 0, slope)
+  
+  return(result)
+}
+
+determine_slope_total_price <- function(product) {
+  
+  specific_product_time<-product_order_reviews |> 
+  mutate(shipping_limit_date=as.Date(shipping_limit_date, format = "%d/%m/%Y")) |> 
+  mutate(shipping_month=as.Date(format(shipping_limit_date, "%Y-%m-01"))) |> 
+  filter(product_category_name_english==product, 
+         shipping_month!="2018-09-01") |> #remove due to incomplete dataset to represent sales of the month
+  select(price, product_category_name_english, shipping_month) |> 
+  group_by(shipping_month) |> 
+  summarise(no_order=n(), total_price=sum(price))
+  
+  slope<-coef(lm(total_price~shipping_month, data=specific_product_time))["shipping_month"] |> 
+  as.numeric()
+  
+  result <- ifelse(is.na(slope), 0, slope)
+  
+  return(result)
+}
+
+determine_slope_no_order("fashion_children_clothes")
+determine_slope_total_price("fashion_children_clothes")
+```
+
+Now, we can initialise an empty dataframe with all of the product names and loop this function through all products.
+```{r eval=FALSE}
+product_list<-unique(product_order_reviews_location$product_category_name_english) #previously created
+
+df<-data.frame(product_list, 0, 0) |> 
+  rename(slope_no_order=X0, slope_total_price=X0.1)
+
+for (i in product_list){
+  slope_no_order=determine_slope_no_order(i)
+  slope_total_price=determine_slope_total_price(i)
+  df <- rbind(df, data.frame(product_list = i, slope_no_order = slope_no_order, slope_total_price = slope_total_price))
+}
+
+df
+```
+
+
+
+
