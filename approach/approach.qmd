@@ -1,0 +1,114 @@
+---
+title: "Approach"
+date-modified: "`r Sys.Date()`"
+number-sections: true
+format:
+  html:
+    code-tools: true
+editor: visual
+---
+
+## Installing packages
+
+```{r}
+pacman::p_load(sf, tmap, tidyverse, sfdep, DT, gridExtra)
+```
+
+## Data Wrangling
+
+### Geospatial Data
+
+To create map plots, we require shape files of Thailand to create the boundaries of each state for map plotting. We used the dataset from HDX accessible [here](https://data.humdata.org/dataset/cod-ab-tha?). As we wanted to analyse patterns across states, ADM1 is used.
+
+```{r}
+TH_ADM1<-st_read(dsn="data/geospatial/shapefiles",
+                    layer="tha_admbnda_adm1_rtsd_20220121") |> 
+  st_transform(24047) |> #Since the coordinate reference system is not set to the CRS that thailand uses, we use st_transform to change it to Thailans CRS (24047).
+  arrange(ADM1_EN) |> 
+  select(ADM1_EN, geometry)
+```
+
+A check for duplicates is done below:
+
+```{r}
+TH_ADM1$ADM1_EN[duplicated(TH_ADM1$ADM1_EN)==TRUE] #check for duplicates
+```
+
+Since there are no duplicates, we can continue with our analysis!
+
+### Aspatial Data
+
+The necessary datasets we are interested in are read into R's environment below:
+
+```{r}
+consumer_location<-read.csv("data/001_lomo_customers_dataset.csv")
+products<-read_csv("data/004_lomo_products_dataset.csv")
+products_category<-read_csv("data/005_lomo_product_category_name_translation.csv")
+consumer_orders<-read.csv("data/006_lomo_orders_dataset.csv")
+order_items<-read_csv("data/007_lomo_order_items_dataset.csv")
+payment<-read_csv("data/008_lomo_order_payments_dataset.csv")
+reviews<-read_csv("data/009_lomo_order_reviews_dataset.csv")
+```
+
+First we want to create a dataframe that aggregates consumer orders and payment amount on a state level
+
+```{r}
+consumer_orders_payment<-consumer_orders |> 
+  inner_join(payment) #joining order and payment info
+```
+
+To make sense of the data on a spatial level, we conduct another join with consumer_location to get the location of each order.
+
+```{r}
+consumer_orders_location<-consumer_orders_payment |> 
+  inner_join(consumer_location, by="customer_id") |> 
+  mutate(customer_state=as.factor(customer_state)) #create factor object for ease of plotting graphs
+
+summary(consumer_orders_location)
+```
+
+We are interested to see, at the state level, what are number of orders, average payment and total payment statistics. Using the summarise function, we create a new dataframe for analysis:
+
+```{r}
+count_location_state<-consumer_orders_location |> 
+  group_by(customer_state) |> 
+  summarise(no_orders=n(), ave_payment=mean(payment_value), total_payment=sum(payment_value))  |> 
+  rename(ADM1_EN=customer_state)
+
+datatable(count_location_state)
+```
+
+Our second aspatial dataframe focuses on product specific data. We first obtain the translated product categories by conducting a join betweem "products" and "product_category" we reassign "products" to this data frame.
+
+```{r}
+products<-products |> 
+  inner_join(products_category,by=c("product_category_name"="product_category_name_portugese")) |> 
+  select(product_id, product_category_name_english) |> 
+  mutate(product_category_name_english=as.factor(product_category_name_english))
+```
+
+Next, we map review and product information to the order dataset
+
+```{r}
+product_order_reviews<-order_items |> 
+  left_join(products, by="product_id") |> 
+  left_join(reviews, by="order_id")
+```
+
+Using summarise, we group the dataset via product category and obtain key statistics from the data (no_orders, ave_review, ave_price, total_price).
+
+```{r}
+product_order_reviews_summary<-product_order_reviews |> 
+  group_by(product_category_name_english) |> 
+  summarise(no_orders=n(), ave_review=mean(review_score), ave_price=mean(price), total_price=sum(price)) |> 
+  arrange(desc(total_price))
+
+datatable(product_order_reviews_summary)
+```
+
+We can include the location dimension by conducting a join with "consumer_orders_location" previously created
+
+```{r}
+product_order_reviews_location<-product_order_reviews |> 
+  left_join(consumer_orders_location, by="order_id")
+```

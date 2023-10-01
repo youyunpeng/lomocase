@@ -1,0 +1,61 @@
+---
+title: "Problem Statement"
+date-modified: "`r Sys.Date()`"
+number-sections: true
+format:
+  html:
+    code-fold: true
+    code-tools: true
+editor: visual
+---
+
+
+## Problem statement and Context
+
+LoMo is a department store in Portugal and its online operations focus is on a B2B2C model. Small businesses across the country can leverage the platform to connect with customers and utilise its logistics partners to close the loop. For the context of this exercise, we will focus only on the customer side of the business.
+
+Processes that are involved in its operations in fulfilling customer orders are highlighted below
+
+1.  Customer makes a purchase
+
+2.  Seller is notified to fulfill order
+
+3.  Customer receives goods/estimated delivery date is due, a satisfaction survey is pushed
+
+LoMo has decided to enter Asia Pacific in 2015, selecting Thailand as its first entry point.
+
+The problem statements are stated below:
+
+-   Which product category has the best performance and which has the highest potential?
+
+-   If you were the Chief Marketing Officer, how would you prioritise your (2C) marketing efforts? Would your strategy differ by region (state)? (Visualising your points on a map would help)
+
+## Approach
+
+In answering the two questions, we conduct our analysis on both aggregate and state-level.
+
++--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+| Problem Statement                                                                                                                                                                          | Sub Questions                                                                                                         |
++============================================================================================================================================================================================+=======================================================================================================================+
+| Which product category has the best performance and which has the highest potential?                                                                                                       | On an aggregate level:                                                                                                |
+|                                                                                                                                                                                            |                                                                                                                       |
+|                                                                                                                                                                                            | -   which product categories had the highest order count, revenue generated, revenue/order generated, average reviews |
+|                                                                                                                                                                                            |                                                                                                                       |
+|                                                                                                                                                                                            | On the state-level:                                                                                                   |
+|                                                                                                                                                                                            |                                                                                                                       |
+|                                                                                                                                                                                            | -   Specific to any selected product, are there specific states that performed better in these statistics             |
+|                                                                                                                                                                                            |                                                                                                                       |
+|                                                                                                                                                                                            | -   When evaluating the state-level performance, is there spatial clustering in the level of performance              |
++--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+| If you were the Chief Marketing Officer, how would you prioritise your (2C) marketing efforts? Would your strategy differ by region (state)? (Visualising your points on a map would help) | On the state level:                                                                                                   |
+|                                                                                                                                                                                            |                                                                                                                       |
+|                                                                                                                                                                                            | -   Which states had the highest order count, revenue generated, revenue/order generated, average reviews             |
+|                                                                                                                                                                                            |                                                                                                                       |
+|                                                                                                                                                                                            | -   When evaluating the state-level performance, is there spatial clustering in the level of performance              |
++--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+
+Therefore, we are answering the following questions
+
+1.  Which states should Lomo focus on (with high value consumers)
+2.  Which product categories on the aggregate level are the best performing
+3.  If Lomo is looking at a specific product category, which states should Lomo focus their marketing efforts on
