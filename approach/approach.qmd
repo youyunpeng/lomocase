@@ -106,17 +106,24 @@ product_order_reviews_summary<-product_order_reviews |>
 datatable(product_order_reviews_summary)
 ```
 
+From the data tables generated, we are able to sort the product categories, and quickly see at a glance, which product cateories had the highest order count, revenue generated or highest reviews.
+
 We can include the location dimension by conducting a join with "consumer_orders_location" previously created
 
 ```{r}
 product_order_reviews_location<-product_order_reviews |> 
   left_join(consumer_orders_location, by="order_id")
 ```
+
 ## Exploratory Data analysis
 
-### Aggregate
+### Aggregate Indicators
 
-Lets create 3 chloropleth maps corresponding to the different
+In this section we aim to differentiate the performance of different states. To answer the question of which states should be pioritised when coming up with a marketing strategy.
+
+Currently, we have 3 indicators: - Total Payment - Average Payment - Number of orders
+
+Lets create 3 chloropleth maps corresponding to the different indicators to investigate the spatial patterns.
 
 ```{r}
 count_location_state_geometry<-count_location_state |> 
@@ -171,9 +178,115 @@ plot_total_payment
 plot_no_orders
 ```
 
-Given that the aggregated data would have more data points, we can conduct some statistical analysis on the possibility of clustering of these results.
+Given that the aggregated data would have more data points, we can conduct some statistical analysis on the possibility of clustering or dispersion of locations with similar results.
 
-### Products
+To create a LISA map, we first have to create the HCSA object below. "Phuket" is excluded from our analysis as it does not have neighbours and can cause errors in our execution
+
+```{r}
+wm_q<-filter(count_location_state_geometry, ADM1_EN!="Phuket")  |> 
+  mutate(nb=st_contiguity(geometry),
+         wt=st_inverse_distance(nb,
+                                 geometry,
+                                 scale=1,
+                                 alpha=1)) |> 
+  select(ADM1_EN, no_orders, geometry, nb, wt)
+
+sum(is.na(wm_q$no_orders))
+wm_q$nb
+
+HCSA<- wm_q |>
+  mutate(local_Gi=local_gstar_perm(
+    no_orders, nb, wt, nsim=99),
+    .before=1)  |> #code chunk to compute Gi star value
+  unnest(local_Gi)
+```
+
+We can condense the HCSA and wm_q to one function below. We repeat the same for the other 2 variables (total_payment) and (ave_payment)
+
+```{r}
+HCSA_no_orders<- filter(count_location_state_geometry, ADM1_EN!="Phuket")  |> 
+  mutate(nb=st_contiguity(geometry),
+         wt=st_inverse_distance(nb,
+                                 geometry,
+                                 scale=1,
+                                 alpha=1)) |> 
+  select(ADM1_EN, no_orders, geometry, nb, wt) |>
+  mutate(local_Gi=local_gstar_perm(
+    no_orders, nb, wt, nsim=99),
+    .before=1)  |> #code chunk to compute Gi star value
+  unnest(local_Gi)
+
+HCSA_total_payment<- filter(count_location_state_geometry, ADM1_EN!="Phuket")  |> 
+  mutate(nb=st_contiguity(geometry),
+         wt=st_inverse_distance(nb,
+                                 geometry,
+                                 scale=1,
+                                 alpha=1)) |> 
+  select(ADM1_EN, total_payment, geometry, nb, wt) |>
+  mutate(local_Gi=local_gstar_perm(
+    total_payment, nb, wt, nsim=99),
+    .before=1)  |> #code chunk to compute Gi star value
+  unnest(local_Gi)
+
+HCSA_ave_payment<- filter(count_location_state_geometry, ADM1_EN!="Phuket")  |> 
+  mutate(nb=st_contiguity(geometry),
+         wt=st_inverse_distance(nb,
+                                 geometry,
+                                 scale=1,
+                                 alpha=1)) |> 
+  select(ADM1_EN, ave_payment, geometry, nb, wt) |>
+  mutate(local_Gi=local_gstar_perm(
+    ave_payment, nb, wt, nsim=99),
+    .before=1)  |> #code chunk to compute Gi star value
+  unnest(local_Gi)
+```
+
+We can create the LISA plots below:
+
+```{r}
+HCSA_no_orders_plot <- 
+    tm_shape(HCSA_no_orders) +
+    tm_polygons() +
+    tm_shape(HCSA_no_orders %>% filter(p_sim <0.05)) +
+    tm_fill("gi_star",
+            style="equal",
+            n=5) +
+    tm_borders(alpha = 0.5) +
+    tm_layout(main.title = paste("Significant Local Gi for no_orders"),
+              main.title.size = 0.8)
+
+HCSA_total_payment_plot <- 
+    tm_shape(HCSA_total_payment) +
+    tm_polygons() +
+    tm_shape(HCSA_total_payment %>% filter(p_sim <0.05)) +
+    tm_fill("gi_star",
+            style="equal",
+            n=5) +
+    tm_borders(alpha = 0.5) +
+    tm_layout(main.title = paste("Significant Local Gi for total_payment"),
+              main.title.size = 0.8)
+
+HCSA_ave_payment_plot <- 
+    tm_shape(HCSA_ave_payment) +
+    tm_polygons() +
+    tm_shape(HCSA_ave_payment %>% filter(p_sim <0.05)) +
+    tm_fill("gi_star",
+            style="equal",
+            n=5) +
+    tm_borders(alpha = 0.5) +
+    tm_layout(main.title = paste("Significant Local Gi for ave_payment"),
+              main.title.size = 0.8)
+
+HCSA_no_orders_plot
+HCSA_total_payment_plot
+HCSA_ave_payment_plot
+```
+
+#### Observations and conclusions:
+
+### Product specific indicators
+
+We can combine our geospatial and product information to also analyse product specific performance across different states in thailand.
 
 With the dataset in place, we can now create a shiny app to loop through the different products and indicators that the user wants to focus on. We first try to create a prototype with the inputs "cool_stuff" as the product category and "no_orders" as the indicator
 
@@ -208,6 +321,8 @@ tm_shape(product_order_reviews_location |>
   tm_scale_bar()+
   tm_grid(alpha=0.2)
 ```
+
+As we can see in the output, it creates a density map as expected. We can extend our understanding to create a Shiny app so as to loop this analysis across all other products and indicators.
 
 A simple Shiny App can be created:
 
@@ -261,8 +376,14 @@ server <- function(input, output) {
 shinyApp(ui, server)
 ```
 
-## A more generic analysis of products
-Time analysis:
+### Time-based analysis of product trends
+
+Something else interesting could be to look into whether there has been decline or increase in product specific indicators over time, on the aggregate level.
+
+Through this analysis, we aim to select the best performing products that are on the rise over the years, and to also sieve out the worst performing products.
+
+Similar to the previous cases, we start with analysing an arbritary test scenario and extend our analysis to other cases/products.
+
 ```{r}
 i="health_beauty"
 j="no_order"
@@ -275,7 +396,13 @@ specific_product_time<-product_order_reviews |>
   select(price, product_category_name_english, shipping_month) |> 
   group_by(shipping_month) |> 
   summarise(no_order=n(), total_price=sum(price))
+```
 
+With the information in place, we fit a linear model onto the data to see how the indicators (no_order, total_price) varies as time (shipping_month) changes.
+
+We can plot the relationship using ggplot.
+
+```{r}
 #fitting linear model and extracting slope of line
 coef(lm(no_order~shipping_month, data=specific_product_time))["shipping_month"] |> 
   as.numeric()
@@ -289,8 +416,10 @@ ggplot(specific_product_time,aes(x=shipping_month, y=total_price))+
   geom_smooth(method = "lm", se = FALSE)
 ```
 
-We can create 2 functions to obtain the slopes for no_order and total price below:
-```{r} 
+To generalise this analysis to all products, we can can create 2 functions to obtain the slopes for no_order and total price below, so as to compare across different products.
+
+```{r}
+product_order_reviews
 determine_slope_no_order <- function(product) {
   
   specific_product_time<-product_order_reviews |> 
@@ -334,21 +463,55 @@ determine_slope_total_price("fashion_children_clothes")
 ```
 
 Now, we can initialise an empty dataframe with all of the product names and loop this function through all products.
-```{r eval=FALSE}
-product_list<-unique(product_order_reviews_location$product_category_name_english) #previously created
 
-df<-data.frame(product_list, 0, 0) |> 
-  rename(slope_no_order=X0, slope_total_price=X0.1)
+```{r}
+product_list<-unique(product_order_reviews_location$product_category_name_english) |>  #previously created 
+  na.omit()
+
+df<-data.frame(product_list = character(0), 
+           slope_no_order = character(0),
+           slope_total_price = character(0))
 
 for (i in product_list){
   slope_no_order=determine_slope_no_order(i)
   slope_total_price=determine_slope_total_price(i)
-  df <- rbind(df, data.frame(product_list = i, slope_no_order = slope_no_order, slope_total_price = slope_total_price))
+  new_row <- data.frame(product_list = i, 
+                        slope_no_order = slope_no_order,
+                        slope_total_price = slope_total_price)
+  df <- rbind(df, new_row)
 }
 
 df
 ```
 
+We can find the top 5 and bottom 5 products based on slope_no_order
 
+```{r}
+no_order_bottom_5<-df |> 
+  arrange(slope_no_order) |> 
+  head(5)
 
+no_order_top_5<-df |> 
+  arrange(desc(slope_no_order)) |> 
+  head(5)
 
+no_order_bottom_5
+no_order_top_5
+```
+
+We can repeat the same analysis for slope_total_price
+
+```{r}
+total_price_bottom_5<-df |> 
+  arrange(slope_no_order) |> 
+  head(5)
+
+total_price_top_5<-df |> 
+  arrange(desc(slope_no_order)) |> 
+  head(5)
+
+total_price_bottom_5
+total_price_top_5
+```
+
+From our results, we can conclude some products that have grown in sales in the past years, and should be pioritised, as well as others which should be depioritised.
